@@ -1,0 +1,545 @@
+Index: src/app/index.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/app/index.js	(revision e571c090ca99a7ac8be7fe350edb404e1542adb5)
++++ src/app/index.js	(date 1605940083203)
+@@ -12,6 +12,7 @@
+ const monetizationMobileRouter = require("./monetization/mobileRouter");
+ const appsMasterMobileRouter = require("./appsMaster/mobileRouter");
+ const appsRouter = require("./apps/router");
++const googlePlayScraperRouter = require("./googlePlayScraperRouter/router");
+ const validateToken = require( "../middlewares/validateToken" );
+ 
+ module.exports = ( app ) => {
+@@ -30,4 +31,5 @@
+     app.use("/appmastermobile", appsMasterMobileRouter);
+     app.use("/monetizationmobile", monetizationMobileRouter);
+     app.use("/apps", appsRouter);
++    app.use("/googleplayscraper", googlePlayScraperRouter);
+ };
+Index: src/app/googlePlayScraperRouter/model.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/app/googlePlayScraperRouter/model.js	(date 1605958883130)
++++ src/app/googlePlayScraperRouter/model.js	(date 1605958883130)
+@@ -0,0 +1,58 @@
++const mongoose = require("mongoose");
++
++const Schema = mongoose.Schema;
++
++const GooglePlayScraper = new Schema({
++    title: String,
++    description: String,
++    descriptionHTML: String,
++    summary: String,
++    installs: String,
++    minInstalls: Number,
++    maxInstalls: Number,
++    score: Number,
++    scoreText: String,
++    ratings: Number,
++    reviews: Number,
++    histogram: Object,
++    price: Number,
++    free: Boolean,
++    currency: String,
++    priceText: String,
++    offersIAP: Boolean,
++    IAPRange: String,
++    size: String,
++    androidVersion: String,
++    androidVersionText: String,
++    developer: String,
++    developerId: String,
++    developerEmail: String,
++    developerWebsite: String,
++    developerAddress: String,
++    privacyPolicy: String,
++    developerInternalID: String,
++    genre: String,
++    genreId: String,
++    familyGenre: String,
++    familyGenreId: String,
++    icon: String,
++    headerImage: String,
++    screenshots: Array,
++    video: String,
++    videoImage: String,
++    contentRating: String,
++    contentRatingDescription: String,
++    adSupported: Boolean,
++    released: String,
++    updated: Number,
++    version: String,
++    recentChanges: String,
++    comments: Array,
++    editorsChoice: Boolean,
++    appId: String,
++    url: String
++}, {
++    timestamps: true,
++});
++
++module.exports = mongoose.model("GooglePlayScraper", GooglePlayScraper);
+Index: src/app/googlePlayScraperRouter/repository.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/app/googlePlayScraperRouter/repository.js	(date 1605961126472)
++++ src/app/googlePlayScraperRouter/repository.js	(date 1605961126472)
+@@ -0,0 +1,27 @@
++const mongoose = require( "mongoose" );
++
++const GooglePlayScraper = mongoose.model( "GooglePlayScraper" );
++
++
++const createApp = async ( data ) => {
++    // console.log(data)
++    const googlePlayScraper = new GooglePlayScraper( data );
++    return await googlePlayScraper.save();
++};
++
++const getApps = (query) => GooglePlayScraper.find(query);
++
++const findAppDetails = ( id ) => GooglePlayScraper.findOne( { _id: id } );
++
++const update = (id, body) => GooglePlayScraper.updateOne({_id:id}, body);
++
++const deleteApp = (id) => GooglePlayScraper.deleteOne({_id: id});
++
++
++module.exports = {
++    createApp,
++    getApps,
++    update,
++    findAppDetails,
++    deleteApp
++};
+Index: src/app/googlePlayScraperRouter/controller.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/app/googlePlayScraperRouter/controller.js	(date 1605962961245)
++++ src/app/googlePlayScraperRouter/controller.js	(date 1605962961245)
+@@ -0,0 +1,68 @@
++const repository = require("./repository");
++const gplay = require('google-play-scraper');
++
++exports.create = async (req, res) => {
++    try {
++        let query = {};
++        if (req.body.appId) {
++            query = {appId: req.body.appId};
++        }
++        const isExist = await repository.getApps(query);
++        if (isExist && isExist.length) {
++            return res.send("This app id is already exist");
++        }
++        const get = await gplay.app({appId: req.body.appId})
++        if (get && get.appId) {
++            const appCategories = await repository.createApp(get);
++            return  res.success(appCategories);
++        }
++         res.send("Not Found");
++
++    } catch (err) {
++        res.send(err);
++    }
++};
++
++exports.update = async (req, res) => {
++    try {
++        await repository.update({_id: req.params.id},
++            {$set: {[`data.${req.query.type}`]: req.body}}
++        )
++        const update = await repository.findAppDetails(req.params.id);
++        res.success(update);
++    } catch (err) {
++        res.send(err);
++    }
++};
++
++exports.delete = async (req, res) => {
++    try {
++        const deleteApp = await repository.deleteApp(req.params.id, req.body);
++        res.success(deleteApp);
++    } catch (err) {
++        res.send(err);
++    }
++};
++//
++exports.list = async (req, res) => {
++    try {
++        let query = {};
++        if (req.body) {
++            query = req.body;
++        }
++        const appCategories = await repository.getApps(query);
++        res.success(appCategories);
++    } catch (err) {
++        res.send(err);
++    }
++};
++
++
++exports.detail = async (req, res) => {
++    try {
++        const details = await repository.findAppDetails(req.params.id);
++        res.success(details);
++    } catch (err) {
++        res.send(err);
++    }
++};
+Index: package.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- package.json	(revision e571c090ca99a7ac8be7fe350edb404e1542adb5)
++++ package.json	(date 1605939663508)
+@@ -17,10 +17,12 @@
+     "cors": "^2.8.5",
+     "express": "^4.16.3",
+     "express-jwt": "^5.3.1",
++    "google-play-scraper": "^8.0.2",
+     "jsonwebtoken": "^8.0.0",
+     "md5": "^2.2.1",
+     "mongodb": "^3.6.3",
+     "mongoose": "^5.7.5",
++    "nodemon": "^2.0.6",
+     "save": "^2.3.0",
+     "winston": "^2.3.1"
+   },
+Index: src/app/googlePlayScraperRouter/router.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/app/googlePlayScraperRouter/router.js	(date 1605936227338)
++++ src/app/googlePlayScraperRouter/router.js	(date 1605936227338)
+@@ -0,0 +1,303 @@
++require( "./model" );
++const controller = require( "./controller" );
++
++const express = require( "express" );
++
++const router = express.Router( );
++
++// use apiDoc to generate documentation for API routes
++// Details on how to use on: http://apidocjs.com/
++// install apidoc globally: npm install apidoc -g
++// Generate documentation: apidoc -i src/ -o apidoc/
++
++/**
++ *    @apiGroup Apps
++ *    @api {post} /api insert Api.
++ *    @apiExample {response} Example response:
++ *     {
++    "success": true,
++    "payload": {
++        "app_setting": [
++            {
++                "key": "impression_msg",
++                "type": "bool",
++                "value": "false"
++            },
++            {
++                "key": "new_app_link",
++                "type": "string",
++                "value": "https://shorturl.at/vFOSV"
++            },
++            {
++                "key": "is_live",
++                "type": "bool",
++                "value": "true"
++            },
++            {
++                "key": "app_name",
++                "type": "string",
++                "value": "true"
++            },
++            {
++                "key": "ad_app_link",
++                "type": "string",
++                "value": "shorturl.at/oPS13"
++            },
++            {
++                "key": "version",
++                "type": "int",
++                "value": "1"
++            },
++            {
++                "key": "preload_inter",
++                "type": "bool",
++                "value": "false"
++            }
++        ],
++        "_id": "5f9d2cf3d81fb41bfc3125b9",
++        "appId": "com.base_app.baseguide",
++        "ads_info": [
++            {
++                "_id": "5f9d2cf3d81fb41bfc3125ba",
++                "ads_des": "",
++                "ads_dev": "",
++                "ads_pkg": "",
++                "enabled": false,
++                "ads_icon": "",
++                "priority": 1,
++                "ads_title": "",
++                "ads_banner": "",
++                "ads_time_skip": 4,
++                "ads_title_short": "App 1"
++            },
++            {
++                "_id": "5f9d2cf3d81fb41bfc3125bb",
++                "ads_des": "",
++                "ads_dev": "",
++                "ads_pkg": "",
++                "enabled": false,
++                "ads_icon": "",
++                "priority": 1,
++                "ads_title": "",
++                "ads_banner": "",
++                "ads_time_skip": 4,
++                "ads_title_short": "App 1"
++            },
++            {
++                "_id": "5f9d2cf3d81fb41bfc3125bc",
++                "ads_des": "",
++                "ads_dev": "",
++                "ads_pkg": "",
++                "enabled": false,
++                "ads_icon": "",
++                "priority": 1,
++                "ads_title": "",
++                "ads_banner": "",
++                "ads_time_skip": 4,
++                "ads_title_short": "App 1"
++            }
++        ],
++        "ad_networks": [
++            {
++                "_id": "5f9d2cf3d81fb41bfc3125bd",
++                "api_key": "YOUR_PLACEMENT_ID",
++                "enabled": true,
++                "priority": 1,
++                "ad_network": "Facebook",
++                "banner_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125be",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125bf",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    }
++                ],
++                "native_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c0",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c1",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    }
++                ],
++                "interstitial_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c2",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c3",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    }
++                ],
++                "video_reward_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c4",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c5",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    }
++                ],
++                "native_banner_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c6",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c7",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    }
++                ],
++                "medium_rectangle_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c8",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125c9",
++                        "enabled": true,
++                        "ad_network": "Facebook",
++                        "ad_unit_id": "YOUR_PLACEMENT_ID"
++                    }
++                ]
++            },
++            {
++                "_id": "5f9d2cf3d81fb41bfc3125ca",
++                "api_key": "ca-app-pub-3940256099942544~3347511713",
++                "enabled": true,
++                "priority": 2,
++                "ad_network": "Google",
++                "banner_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125cb",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "ca-app-pub-3940256099942544/6300978111"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125cc",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "ca-app-pub-3940256099942544/6300978111"
++                    }
++                ],
++                "native_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125cd",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "ca-app-pub-3940256099942544/2247696110"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125ce",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "ca-app-pub-3940256099942544/2247696110"
++                    }
++                ],
++                "interstitial_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125cf",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "/6499/example/interstitial"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125d0",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "/6499/example/interstitial"
++                    }
++                ],
++                "video_reward_ads": [
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125d1",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "ca-app-pub-3940256099942544/5224354917"
++                    },
++                    {
++                        "_id": "5f9d2cf3d81fb41bfc3125d2",
++                        "enabled": true,
++                        "ad_network": "Google",
++                        "ad_unit_id": "ca-app-pub-3940256099942544/5224354917"
++                    }
++                ],
++                "native_banner_ads": [],
++                "medium_rectangle_ads": []
++            },
++            {
++                "_id": "5f9d2cf3d81fb41bfc3125d3",
++                "api_key": "0000000",
++                "enabled": true,
++                "priority": 3,
++                "ad_network": "StartApp",
++                "banner_ads": [],
++                "native_ads": [],
++                "interstitial_ads": [],
++                "video_reward_ads": [],
++                "native_banner_ads": [],
++                "medium_rectangle_ads": []
++            }
++        ],
++        "createdAt": "2020-10-31T09:22:59.265Z",
++        "updatedAt": "2020-10-31T09:22:59.265Z",
++        "__v": 0
++    }
++}
++ */
++router.post( "/", controller.create );
++
++/**
++ *    @apiGroup Apps
++ *    @api {put} /api/:id Updating an existing Application Categories.
++ */
++router.put( "/:id", controller.update );
++
++/**
++ *    @apiGroup Apps
++ *    @api {delete} /api/:id Deleting an existing record.
++ */
++router.delete( "/:id", controller.delete );
++
++/**
++ *    @apiGroup Apps
++ *    @api {post} /api/get Display App display. if you want to filter data pass mongodb query in body
++ */
++router.post( "/get", controller.list );
++
++/**
++ *    @apiGroup Apps
++ *    @api {get} /api/:id Get data by id.
++ */
++router.get( "/:id", controller.detail );
++
++module.exports = router;
+Index: src/config/mongoose.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/config/mongoose.js	(revision e571c090ca99a7ac8be7fe350edb404e1542adb5)
++++ src/config/mongoose.js	(date 1605959864367)
+@@ -2,7 +2,7 @@
+ const mongoose = require( "mongoose" );
+ 
+ module.exports = function( app ) {
+-    mongoose.connect( config.mongoUrl, { useUnifiedTopology: true, useNewUrlParser: true });
++    mongoose.connect( "mongodb://localhost:27017/appmanager", { useUnifiedTopology: true, useNewUrlParser: true });
+     mongoose.Promise = global.Promise;
+ 
+     process.on( "SIGINT", cleanup );
